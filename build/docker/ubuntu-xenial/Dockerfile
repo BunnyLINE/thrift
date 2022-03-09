@@ -74,6 +74,8 @@ ENV PATH /usr/lib/llvm-3.8/bin:$PATH
 
 ### languages
 
+# TODO: "apt-get install" without "apt-get update" in the same "RUN" step can cause cache issues if modified later.
+# See https://docs.docker.com/develop/develop-images/dockerfile_best-practices/#run
 RUN apt-get install -y --no-install-recommends \
 `# C++ dependencies` \
       libboost-dev \
@@ -113,27 +115,30 @@ ENV PATH /usr/lib/dart/bin:$PATH
 
 RUN apt-get install -y --no-install-recommends \
 `# dotnet core dependencies` \
-      dotnet-sdk-5.0 \
-      dotnet-runtime-5.0 \
-      aspnetcore-runtime-5.0 \
-      dotnet-apphost-pack-5.0
+      dotnet-sdk-6.0 \
+      dotnet-runtime-6.0 \
+      aspnetcore-runtime-6.0 \
+      dotnet-apphost-pack-6.0
 
-RUN apt-get install -y --no-install-recommends \
-`# Erlang dependencies` \
-      erlang-base \
-      erlang-eunit \
-      erlang-dev \
-      erlang-tools \
-      rebar
+# Erlang dependencies
+ARG ERLANG_OTP_VERSION=18.3.4.11
+ARG ERLANG_REBAR_VERSION=3.13.2
+RUN apt-get update && apt-get install -y --no-install-recommends automake libncurses5-dev && \
+    curl https://raw.githubusercontent.com/kerl/kerl/master/kerl -o /usr/local/bin/kerl && chmod +x /usr/local/bin/kerl && \
+    kerl build $ERLANG_OTP_VERSION && kerl install $ERLANG_OTP_VERSION /usr/local/lib/otp/ && . /usr/local/lib/otp/activate && \
+    curl https://s3.amazonaws.com/rebar3/rebar3 -o /usr/local/bin/rebar3 && chmod +x /usr/local/bin/rebar3 && \
+    curl -ssLo /usr/local/bin/rebar3 https://github.com/erlang/rebar3/releases/download/${ERLANG_REBAR_VERSION}/rebar3 && chmod +x /usr/local/bin/rebar3 && \
+    rebar3 --version
+ENV PATH /usr/local/lib/otp/bin:$PATH
 
 RUN apt-get install -y --no-install-recommends \
 `# GlibC dependencies` \
       libglib2.0-dev
 
 # golang
-ENV GOLANG_VERSION 1.16.7
-ENV GOLANG_DOWNLOAD_URL https://golang.org/dl/go$GOLANG_VERSION.linux-amd64.tar.gz
-ENV GOLANG_DOWNLOAD_SHA256 7fe7a73f55ba3e2285da36f8b085e5c0159e9564ef5f63ee0ed6b818ade8ef04
+ENV GOLANG_VERSION 1.16.13
+ENV GOLANG_DOWNLOAD_URL https://go.dev/dl/go$GOLANG_VERSION.linux-amd64.tar.gz
+ENV GOLANG_DOWNLOAD_SHA256 275fc03c90c13b0bbff13125a43f1f7a9f9c00a0d5a9f2d5b16dbc2fa2c6e12a
 RUN curl -fsSL "$GOLANG_DOWNLOAD_URL" -o golang.tar.gz && \
       echo "$GOLANG_DOWNLOAD_SHA256  golang.tar.gz" | sha256sum -c - && \
       tar -C /usr/local -xzf golang.tar.gz && \
@@ -246,11 +251,12 @@ RUN apt-get install -y --no-install-recommends \
     locale-gen de_DE.UTF-8 && \
     update-locale
 
-# Clean up
-RUN rm -rf /var/cache/apt/* && \
-    rm -rf /var/lib/apt/lists/* && \
-    rm -rf /tmp/* && \
-    rm -rf /var/tmp/*
+# NOTE: this does not reduce the image size but adds an additional layer.
+# # Clean up
+# RUN rm -rf /var/cache/apt/* && \
+#     rm -rf /var/lib/apt/lists/* && \
+#     rm -rf /tmp/* && \
+#     rm -rf /var/tmp/*
 
 ENV DOTNET_CLI_TELEMETRY_OPTOUT 1
 ENV THRIFT_ROOT /thrift
